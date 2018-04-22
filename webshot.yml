@@ -1,0 +1,10 @@
+provider:
+  name: faas
+  gateway: 'http://127.0.0.1:8080'
+functions:
+  webshot:
+    lang: puppeteer
+    handler: ./webshot
+    image: webshot
+    environment:
+      write_debug: true
