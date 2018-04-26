@@ -1,29 +1,29 @@
-FROM node:9-alpine
+FROM node:8.9.1-alpine
 
-# Installs latest Chromium (63) package.
-RUN apk update && apk upgrade && \
-    echo @edge http://nl.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories && \
-    echo @edge http://nl.alpinelinux.org/alpine/edge/main >> /etc/apk/repositories && \
-    apk add --no-cache \
-    chromium@edge \
-    nss@edge
+RUN addgroup -S app && adduser -S -g app app
+
+RUN mkdir -p /home/app
+
+RUN apk --no-cache upgrade && apk add --no-cache chromium
 
 # Alternatively use ADD https:// (which will not be cached by Docker builder)
 RUN apk --no-cache add curl \
     && echo "Pulling watchdog binary from Github." \
     && curl -sSL https://github.com/openfaas/faas/releases/download/0.7.1/fwatchdog > /usr/bin/fwatchdog \
+    && curl -sSL https://github.com/sambaiz/puppeteer-lambda-starter-kit/raw/master/chrome/headless_shell-67.0.3361.0.tar.gz > /home/app/HeadlessChrome.tar.gz \
     && chmod +x /usr/bin/fwatchdog \
     && apk del curl --no-cache
 
-# Help prevent zombie chrome processes
-ADD https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64 /usr/local/bin/dumb-init
-RUN chmod +x /usr/local/bin/dumb-init
+# Extract headless chromw
+WORKDIR /home/app
+RUN tar -xvzf HeadlessChrome.tar.gz
 
 WORKDIR /root/
+
 # Turn down the verbosity to default level.
 ENV NPM_CONFIG_LOGLEVEL warn
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
-RUN mkdir -p /home/app
 
 # Wrapper/boot-strapper
 WORKDIR /home/app
@@ -41,38 +41,23 @@ WORKDIR /home/app/function
 COPY function/*.json ./
 RUN npm i || :
 
-# Tell Puppeteer to skip installing Chrome. We'll be using the installed package.
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
-
-# Puppeteer v0.11.0 works with Chromium 63.
-RUN yarn add puppeteer@0.11.0
-
 # COPY function files and folders
 COPY function/ ./
-
-# Add user so we don't need --no-sandbox.
-RUN addgroup -S pptruser && adduser -S -g pptruser pptruser \
-    && mkdir -p /home/pptruser/Downloads \
-    && chown -R pptruser:pptruser /home/pptruser \
-    && chown -R pptruser:pptruser /home/app
 
 # Set correct permissions to use non root user
 WORKDIR /home/app/
 
 # chmod for tmp is for a buildkit issue (@alexellis)
-RUN chown pptruser:pptruser -R /home/app \
-    && chmod 777 /tmp
+RUN chown app:app -R /home/app \
+    && chmod 777 /tmp \
+    && chmod +x /home/app/headless_shell
 
-# Run everything after as non-privileged user.
-USER pptruser
+USER app
 
 ENV cgi_headers="true"
 ENV fprocess="node index.js"
 
 HEALTHCHECK --interval=1s CMD [ -e /tmp/.lock ] || exit 1
 
-
-# Runs "/usr/bin/dumb-init -- /my/script --with --args"
-ENTRYPOINT ["dumb-init", "--"]
 CMD ["fwatchdog"]
 

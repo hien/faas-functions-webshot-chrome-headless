@@ -3,20 +3,20 @@ const puppeteer = require('puppeteer')
 
 module.exports = (context, callback) => {
   try {
-    const { url, selector } = JSON.parse(context)
-    let result = { url, selector }
-    console.log(`URL: ${url}`)
-    puppeteer
-      .launch({
-        executablePath: '/usr/bin/chromium-browser',
-        args: ['--disable-dev-shm-usage']
-      })
-      .then(browser => {
-        console.log(browser.version())
-        callback(undefined, browser.version())
-      })
+    const browser = puppeteer.launch({
+      executablePath: '/home/app/headless_shell',
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-gpu',
+        '--disable-setuid-sandbox',
+        '--single-process',
+        '--headless',
+        `--remote-debugging-port=9222`
+      ]
+    })
+    callback(undefined, { status: 'done' })
   } catch (error) {
-    console.error(error.red)
-    callback(error)
+    callback(error, { status: 'error' })
   }
 }
